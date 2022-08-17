@@ -53,9 +53,7 @@ class EndpointRouteSyncMixin(models.AbstractModel):
 
     @api.model
     def _add_after_commit_hook(self, record_ids):
-        # TODO: use `Cursor.postcommit.add`
-        self.env.cr.after(
-            "commit",
+        self.env.cr.postcommit.add(
             partial(self._handle_registry_sync, record_ids),
         )
 
