@@ -3,20 +3,23 @@
 # License LGPL-3.0 or later (http://www.gnu.org/licenses/lgpl).
 
 import logging
+from psycopg2.extensions import AsIs
 
 from odoo import _, api, exceptions, fields, models
+from odoo.addons.base_sparse_field.models.fields import Serialized
 
 ENDPOINT_ROUTE_CONSUMER_MODELS = {
     # by db
 }
 
 
-class EndpointRouteHandler(models.AbstractModel):
+class EndpointRouteHandler(models.Model):
 
     _name = "endpoint.route.handler"
     _inherit = "endpoint.route.sync.mixin"
     _description = "Endpoint Route handler"
 
+    key = fields.Char(required=True, copy=False, index=True)
     name = fields.Char(required=True)
     route = fields.Char(
         required=True,
@@ -45,11 +48,19 @@ class EndpointRouteHandler(models.AbstractModel):
         compute="_compute_endpoint_hash", help="Identify the route with its main params"
     )
     csrf = fields.Boolean(default=False)
+    options = Serialized(default={})
+    consumer_model = fields.Char(required=True)
+    version = fields.Integer(readonly=True, required=True, default=0)
 
     # TODO: add flag to prevent route updates on save ->
     # should be handled by specific actions + filter in a tree view + btn on form
 
     _sql_constraints = [
+        (
+            "endpoint_key_unique",
+            "unique(key)",
+            "You can register an endpoint key only once.",
+        ),
         (
             "endpoint_route_unique",
             "unique(route)",
@@ -57,51 +68,39 @@ class EndpointRouteHandler(models.AbstractModel):
         )
     ]
 
-    @api.constrains("route")
-    def _check_route_unique_across_models(self):
-        """Make sure routes are unique across all models.
-
-        The SQL constraint above, works only on one specific model/table.
-        Here we check that routes stay unique across all models.
-        This is mostly to make sure admins know that the route already exists
-        somewhere else, because route controllers are registered only once
-        for the same path.
+    def init(self):
+        """Initialize global sequence to synchronize routing maps across workers.
         """
-        # TODO: add tests registering a fake model.
-        # However, @simahawk tested manually and it works.
-        # TODO: shall we check for route existance in the registry instead?
-        all_models = self._get_endpoint_route_consumer_models()
-        routes = [x["route"] for x in self.read(["route"])]
-        clashing_models = []
-        for model in all_models:
-            if model != self._name and self.env[model].sudo().search_count(
-                [("route", "in", routes)]
-            ):
-                clashing_models.append(model)
-        if clashing_models:
-            raise exceptions.UserError(
-                _(
-                    "Non unique route(s): %(routes)s.\n"
-                    "Found in model(s): %(models)s.\n"
-                )
-                % {"routes": ", ".join(routes), "models": ", ".join(clashing_models)}
-            )
+        self.env.cr.execute(
+            """
+            SELECT 1  FROM pg_class WHERE RELNAME = 'endpoint_route_version'
+        """
+        )
+        if not self.env.cr.fetchone():
+            sql = """
+                CREATE SEQUENCE endpoint_route_version INCREMENT BY 1 START WITH 1;
+                CREATE FUNCTION increment_endpoint_route_version()
+                  returns trigger
+                AS
+                $body$
+                begin
+                  new.version := nextval('endpoint_route_version');
+                  return new;
+                end;
+                $body$
+                language plpgsql;
 
-    def _get_endpoint_route_consumer_models(self):
-        global ENDPOINT_ROUTE_CONSUMER_MODELS
-        if ENDPOINT_ROUTE_CONSUMER_MODELS.get(self.env.cr.dbname):
-            return ENDPOINT_ROUTE_CONSUMER_MODELS.get(self.env.cr.dbname)
-        models = []
-        route_model = "endpoint.route.handler"
-        for model in self.env.values():
-            if (
-                model._name != route_model
-                and not model._abstract
-                and route_model in model._inherit
-            ):
-                models.append(model._name)
-        ENDPOINT_ROUTE_CONSUMER_MODELS[self.env.cr.dbname] = models
-        return models
+                CREATE TRIGGER  update_endpoint_route_version_trigger
+                   before update on %(table)s
+                   for each row execute procedure increment_endpoint_route_version();
+                CREATE TRIGGER  insert_endpoint_route_version_trigger
+                   before insert on %(table)s
+                   for each row execute procedure increment_endpoint_route_version();
+                CREATE TRIGGER  delete_endpoint_route_version_trigger
+                   after delete on %(table)s
+                   for each row execute procedure increment_endpoint_route_version();
+            """
+            self._cr.execute(sql, {"table": AsIs(self._table)})
 
     @property
     def _logger(self):
@@ -145,7 +144,7 @@ class EndpointRouteHandler(models.AbstractModel):
             rec.endpoint_hash = hash(tuple(vals.values()))
 
     def _routing_impacting_fields(self):
-        return ("route", "auth_type", "request_method")
+        return ("route", "auth_type", "request_method", "options")
 
     @api.depends("route")
     def _compute_route(self):
@@ -247,17 +246,26 @@ class EndpointRouteHandler(models.AbstractModel):
     def _default_endpoint_options(self):
         options = {"handler": self._default_endpoint_options_handler()}
         return options
+        
+    def get_consumer(self):
+        return self.env[self.consumer_model].search(
+            [("endpoint_handler_id", "=", self.id)]
+        )
 
     def _default_endpoint_options_handler(self):
-        self._logger.warning(
-            "No specific endpoint handler options defined for: %s, falling back to default",
-            self._name,
-        )
-        base_path = "odoo.addons.endpoint_route_handler.controllers.main"
-        return {
-            "klass_dotted_path": f"{base_path}.EndpointNotFoundController",
-            "method_name": "auto_not_found",
-        }
+        consumer = self.get_consumer()
+        if hasattr(consumer, "_default_endpoint_options_handler"):
+            return consumer._default_endpoint_options_handler()
+        else:
+            self._logger.warning(
+                "No specific endpoint handler options defined for: %s, falling back to default",
+                self._name,
+            )
+            base_path = "odoo.addons.endpoint_route_handler.controllers.main"
+            return {
+                "klass_dotted_path": f"{base_path}.EndpointNotFoundController",
+                "method_name": "auto_not_found",
+            }
 
     def _get_routing_info(self):
         route = self.route

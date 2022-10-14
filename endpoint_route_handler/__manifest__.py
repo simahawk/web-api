@@ -10,6 +10,7 @@
     "author": "Camptocamp,Odoo Community Association (OCA)",
     "maintainers": ["simahawk"],
     "website": "https://github.com/OCA/web-api",
+    "depends": ["base_sparse_field",],
     "data": [
         "security/ir.model.access.csv",
     ],

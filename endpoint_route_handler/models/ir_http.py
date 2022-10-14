@@ -17,6 +17,10 @@ _logger = logging.getLogger(__name__)
 class IrHttp(models.AbstractModel):
     _inherit = "ir.http"
 
+    @staticmethod
+    def _get_endpoint_registry(cr):
+        return EndpointRegistry.registry_for(cr)
+
     @classmethod
     def _generate_routing_rules(cls, modules, converters):
         # Override to inject custom endpoint rules.
@@ -28,8 +32,7 @@ class IrHttp(models.AbstractModel):
     @classmethod
     def _endpoint_routing_rules(cls):
         """Yield custom endpoint rules"""
-        cr = http.request.env.cr
-        e_registry = EndpointRegistry.registry_for(cr)
+        e_registry = cls._get_endpoint_registry(cr = http.request.env.cr)
         for endpoint_rule in e_registry.get_rules():
             _logger.debug("LOADING %s", endpoint_rule)
             endpoint = endpoint_rule.endpoint
@@ -53,3 +56,19 @@ class IrHttp(models.AbstractModel):
             cls._auth_method_user()
         except http.SessionExpiredException:
             raise werkzeug.exceptions.Unauthorized()
+
+    @classmethod
+    def routing_map(cls, key=None):
+        last_version_key = "_endpoint_route_last_version"
+        is_routing_map_new = not hasattr(cls, "_routing_map")
+        e_registry = cls._get_endpoint_registry(cr = http.request.env.cr)
+        last_version = e_registry.get_last_version()
+        current_version  = getattr(cls, last_version_key, None)
+        if is_routing_map_new:
+            setattr(cls, last_version_key, last_version)
+        elif current_version < last_version:
+            _logger.info("Endpoint registry updated, reset routing map")
+            cls._routing_map = {}
+            cls._rewrite_len = {}
+        return super().routing_map(key=key)
+
