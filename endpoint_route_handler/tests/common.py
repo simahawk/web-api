@@ -17,7 +17,7 @@ class CommonEndpoint(SavepointCase):
         super().setUpClass()
         cls._setup_env()
         cls._setup_records()
-        cls.route_handler = cls.env["endpoint.route.handler"]
+        cls.route_model = cls.env["endpoint.route"]
 
     @classmethod
     def _setup_env(cls):

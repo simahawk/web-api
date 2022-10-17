@@ -1,25 +1,32 @@
 # Copyright 2021 Camptocamp SA
 # @author: Simone Orsi <simone.orsi@camptocamp.com>
 # License LGPL-3.0 or later (http://www.gnu.org/licenses/lgpl).
+import importlib
+from functools import partial
 
+from distutils.log import error
 import logging
+import pdb
 from psycopg2.extensions import AsIs
 
+from odoo import http
 from odoo import _, api, exceptions, fields, models
 from odoo.addons.base_sparse_field.models.fields import Serialized
 
-ENDPOINT_ROUTE_CONSUMER_MODELS = {
-    # by db
-}
+from ..exceptions import EndpointHandlerNotFound
 
 
-class EndpointRouteHandler(models.Model):
+class EndpointRoute(models.Model):
 
-    _name = "endpoint.route.handler"
-    _inherit = "endpoint.route.sync.mixin"
-    _description = "Endpoint Route handler"
+    _name = "endpoint.route"
+    _description = "Endpoint Route"
 
-    key = fields.Char(required=True, copy=False, index=True)
+    active = fields.Boolean(default=True)
+    key = fields.Char(
+        required=True, copy=False, index=True,
+        compute="_compute_key", store=True,
+        readonly=False
+    )
     name = fields.Char(required=True)
     route = fields.Char(
         required=True,
@@ -29,6 +36,18 @@ class EndpointRouteHandler(models.Model):
         readonly=False,
         store=True,
         copy=False,
+    )
+    routing = Serialized(
+        copy=False,
+        compute="_compute_routing_metadata",
+        store=True,
+        readonly=False
+    )
+    options = Serialized(
+        copy=False,
+        compute="_compute_routing_metadata",
+        store=True,
+        readonly=False
     )
     route_group = fields.Char(help="Use this to classify routes together")
     route_type = fields.Selection(selection="_selection_route_type", default="http")
@@ -48,9 +67,10 @@ class EndpointRouteHandler(models.Model):
         compute="_compute_endpoint_hash", help="Identify the route with its main params"
     )
     csrf = fields.Boolean(default=False)
-    options = Serialized(default={})
-    consumer_model = fields.Char(required=True)
+    consumer_model = fields.Char()
     version = fields.Integer(readonly=True, required=True, default=0)
+    # Used to register routes unrelated from another real record.
+    parent_id = fields.Many2one(comodel_name="endpoint.route")
 
     # TODO: add flag to prevent route updates on save ->
     # should be handled by specific actions + filter in a tree view + btn on form
@@ -68,39 +88,39 @@ class EndpointRouteHandler(models.Model):
         )
     ]
 
-    def init(self):
-        """Initialize global sequence to synchronize routing maps across workers.
-        """
-        self.env.cr.execute(
-            """
-            SELECT 1  FROM pg_class WHERE RELNAME = 'endpoint_route_version'
-        """
-        )
-        if not self.env.cr.fetchone():
-            sql = """
-                CREATE SEQUENCE endpoint_route_version INCREMENT BY 1 START WITH 1;
-                CREATE FUNCTION increment_endpoint_route_version()
-                  returns trigger
-                AS
-                $body$
-                begin
-                  new.version := nextval('endpoint_route_version');
-                  return new;
-                end;
-                $body$
-                language plpgsql;
+    # def init(self):
+    #     """Initialize global sequence to synchronize routing maps across workers.
+    #     """
+    #     self.env.cr.execute(
+    #         """
+    #         SELECT 1  FROM pg_class WHERE RELNAME = 'endpoint_route_version'
+    #     """
+    #     )
+    #     if not self.env.cr.fetchone():
+    #         sql = """
+    #             CREATE SEQUENCE endpoint_route_version INCREMENT BY 1 START WITH 1;
+    #             CREATE FUNCTION increment_endpoint_route_version()
+    #               returns trigger
+    #             AS
+    #             $body$
+    #             begin
+    #               new.version := nextval('endpoint_route_version');
+    #               return new;
+    #             end;
+    #             $body$
+    #             language plpgsql;
 
-                CREATE TRIGGER  update_endpoint_route_version_trigger
-                   before update on %(table)s
-                   for each row execute procedure increment_endpoint_route_version();
-                CREATE TRIGGER  insert_endpoint_route_version_trigger
-                   before insert on %(table)s
-                   for each row execute procedure increment_endpoint_route_version();
-                CREATE TRIGGER  delete_endpoint_route_version_trigger
-                   after delete on %(table)s
-                   for each row execute procedure increment_endpoint_route_version();
-            """
-            self._cr.execute(sql, {"table": AsIs(self._table)})
+    #             CREATE TRIGGER  update_endpoint_route_version_trigger
+    #                BEFORE INSERT OR UPDATE ON %(table)s
+    #                FOR EACH ROW
+    #                WHEN (new.registry_sync = true)
+    #                EXECUTE PROCEDURE increment_endpoint_route_version();
+    #             CREATE TRIGGER  delete_endpoint_route_version_trigger
+    #                AFTER DELETE ON %(table)s
+    #                FOR EACH ROW
+    #                EXECUTE PROCEDURE increment_endpoint_route_version();
+    #         """
+    #         self._cr.execute(sql, {"table": AsIs(self._table)})
 
     @property
     def _logger(self):
@@ -130,13 +150,26 @@ class EndpointRouteHandler(models.Model):
             ("application/x-www-form-urlencoded", "Form"),
         ]
 
+    def _compute_key(self):
+        for rec in self:
+            rec.route = rec._endpoint_registry_unique_key()
+
+    @api.depends(lambda self: self._routing_impacting_fields())
+    def _compute_routing_metadata(self):
+        for rec in self:
+            import pdb;pdb.set_trace()
+            if not rec.routing:
+                rec.routing = rec._get_routing()
+            if not rec.options:
+                rec.options = rec._get_routing_options()
+
     @api.depends(lambda self: self._routing_impacting_fields())
     def _compute_endpoint_hash(self):
         # Do not use read to be able to play this on NewId records too
         # (NewId records are classified as missing in ACL check).
         # values = self.read(self._routing_impacting_fields())
         values = [
-            {fname: rec[fname] for fname in self._routing_impacting_fields()}
+            {fname: str(rec[fname]) for fname in self._routing_impacting_fields()}
             for rec in self
         ]
         for rec, vals in zip(self, values):
@@ -144,7 +177,7 @@ class EndpointRouteHandler(models.Model):
             rec.endpoint_hash = hash(tuple(vals.values()))
 
     def _routing_impacting_fields(self):
-        return ("route", "auth_type", "request_method", "options")
+        return ("route", "auth_type", "request_method", "routing", "options")
 
     @api.depends("route")
     def _compute_route(self):
@@ -185,71 +218,54 @@ class EndpointRouteHandler(models.Model):
                 raise exceptions.UserError(
                     _("Request content type is required for POST and PUT.")
                 )
+    
+    def _routing_mandatory_keys(self, fname):
+        mandatory_keys = {
+            "routing": {
+                "type": {},
+                "auth": {},
+                "methods": {},
+                "routes": {},
+                "csrf": {},
+            },
+            "options": {
+                "handler": {
+                    "klass_dotted_path": {},
+                    "method_name": {},
+                }
+            }
+        }
+        return mandatory_keys[fname]
 
-    def _refresh_endpoint_data(self):
-        """Enforce refresh of route computed fields.
+    def _routing_check_missing_keys(self, value, to_check, errors=None):
+        errors = errors or []
+        for k, children in to_check.items():
+            if not k in value:
+                errors.append(k)
+                continue
+            self._routing_check_missing_keys(value[k], children, errors=errors)
+        return errors
 
-        Required for NewId records when using this model as a tool.
-        """
-        self._compute_endpoint_hash()
-        self._compute_route()
-
-    def _register_controllers(self, init=False, options=None):
-        if self and self._abstract:
-            self._refresh_endpoint_data()
-        super()._register_controllers(init=init, options=options)
-
-    def _unregister_controllers(self):
-        if self and self._abstract:
-            self._refresh_endpoint_data()
-        super()._unregister_controllers()
-
-    def _prepare_endpoint_rules(self, options=None):
-        return [rec._make_controller_rule(options=options) for rec in self]
-
-    def _registered_endpoint_rule_keys(self):
-        return tuple([rec._endpoint_registry_unique_key() for rec in self])
+    @api.constrains("routing", "options")
+    def _check_routing_metadata(self):
+        for rec in self:
+            for fname in ("options", "routing"):
+                errors = self._routing_check_missing_keys(rec[fname], self._routing_mandatory_keys(fname))
+                if errors:
+                    raise exceptions.UserError(
+                        _("%s `%s` missing mandatory keys: %s") % (rec.route, fname, ", ".join(errors))
+                    )
 
     def _endpoint_registry_unique_key(self):
         return "{0._name}:{0.id}".format(self)
 
-    # TODO: consider if useful or not for single records
-    def _register_single_controller(self, options=None, key=None, init=False):
-        """Shortcut to register one single controller.
-
-        WARNING: as this triggers envs invalidation via `_force_routing_map_refresh`
-        do not abuse of this method to register more than one route.
-        """
-        rule = self._make_controller_rule(options=options, key=key)
-        self._endpoint_registry.update_rules([rule], init=init)
-        if not init:
-            self._force_routing_map_refresh()
-        self._logger.debug(
-            "Registered controller %s (auth: %s)", self.route, self.auth_type
-        )
-
-    def _make_controller_rule(self, options=None, key=None):
-        key = key or self._endpoint_registry_unique_key()
-        route, routing, endpoint_hash = self._get_routing_info()
-        options = options or self._default_endpoint_options()
-        return self._endpoint_registry.make_rule(
-            # fmt: off
-            key,
-            route,
-            options,
-            routing,
-            endpoint_hash,
-            route_group=self.route_group
-            # fmt: on
-        )
-
-    def _default_endpoint_options(self):
+    def _get_routing_options(self):
         options = {"handler": self._default_endpoint_options_handler()}
         return options
         
     def get_consumer(self):
         return self.env[self.consumer_model].search(
-            [("endpoint_handler_id", "=", self.id)]
+            [("endpoint_route_id", "=", self.id)], limit=1
         )
 
     def _default_endpoint_options_handler(self):
@@ -267,7 +283,7 @@ class EndpointRouteHandler(models.Model):
                 "method_name": "auto_not_found",
             }
 
-    def _get_routing_info(self):
+    def _get_routing(self):
         route = self.route
         routing = dict(
             type=self.route_type,
@@ -276,4 +292,54 @@ class EndpointRouteHandler(models.Model):
             routes=[route],
             csrf=self.csrf,
         )
-        return route, routing, self.endpoint_hash
+        return routing
+
+    def get_endpoint(self):
+        """Lookup http.Endpoint to be used for the routing map."""
+        options = self.routing_metadata["options"]
+        handler = self._get_handler(options)
+        pargs = options.get("default_pargs", ())
+        kwargs = options.get("default_kwargs", {})
+        method = partial(handler, *pargs, **kwargs)
+        return http.EndPoint(method, self.routing)
+
+    def _get_handler(self, options):
+        """Resolve endpoint handler lookup.
+
+        `options` must contain `handler` key to provide:
+
+            * the controller's klass via `klass_dotted_path`
+            * the controller's method to use via `method_name`
+
+        Lookup happens by:
+
+            1. importing the controller klass module
+            2. loading the klass
+            3. accessing the method via its name
+
+        If any of them is not found, a specific exception is raised.
+        """
+        # TODO: shall we cache imports?
+        mod_path, klass_name = options["klass_dotted_path"].rsplit(".", 1)
+        try:
+            mod = importlib.import_module(mod_path)
+        except ImportError as exc:
+            raise EndpointHandlerNotFound(f"Module `{mod_path}` not found") from exc
+        try:
+            klass = getattr(mod, klass_name)
+        except AttributeError as exc:
+            raise EndpointHandlerNotFound(f"Class `{klass_name}` not found") from exc
+        method_name = options["method_name"]
+        try:
+            method = getattr(klass(), method_name)
+        except AttributeError as exc:
+            raise EndpointHandlerNotFound(
+                f"Method name `{method_name}` not found"
+            ) from exc
+        return method
+
+    def get_all(self):
+        return self.sudo().search([])
+
+    def get_last_version(self):
+        return self.sudo().search([], limit=1, order="write_date desc").write_date

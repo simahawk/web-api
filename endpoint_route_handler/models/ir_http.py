@@ -26,18 +26,32 @@ class IrHttp(models.AbstractModel):
         # Override to inject custom endpoint rules.
         return chain(
             super()._generate_routing_rules(modules, converters),
-            cls._endpoint_routing_rules(),
+            cls._endpoint_routing_rules(http.request.env),
         )
 
     @classmethod
-    def _endpoint_routing_rules(cls):
+    def _endpoint_routing_rules(cls, env):
         """Yield custom endpoint rules"""
-        e_registry = cls._get_endpoint_registry(cr = http.request.env.cr)
-        for endpoint_rule in e_registry.get_rules():
-            _logger.debug("LOADING %s", endpoint_rule)
-            endpoint = endpoint_rule.endpoint
-            for url in endpoint_rule.routing["routes"]:
-                yield (url, endpoint, endpoint_rule.routing)
+        for endpoint_route in env["endpoint.route"].get_all():
+            _logger.debug("LOADING %s", endpoint_route.route)
+            endpoint = endpoint_route.get_endpoint()
+            for url in endpoint_route.routing["routes"]:
+                yield (url, endpoint, endpoint_route.routing)
+
+    @classmethod
+    def routing_map(cls, key=None):
+        last_version_key = "_endpoint_route_last_version"
+        is_routing_map_new = not hasattr(cls, "_routing_map")
+        env = http.request.env
+        last_version = env["endpoint.route"].get_last_version()
+        current_version  = getattr(cls, last_version_key, None)
+        if is_routing_map_new:
+            setattr(cls, last_version_key, last_version)
+        elif current_version < last_version:
+            _logger.info("Endpoint registry updated, reset routing map")
+            cls._routing_map = {}
+            cls._rewrite_len = {}
+        return super().routing_map(key=key)
 
     @classmethod
     def _auth_method_user_endpoint(cls):
@@ -57,18 +71,4 @@ class IrHttp(models.AbstractModel):
         except http.SessionExpiredException:
             raise werkzeug.exceptions.Unauthorized()
 
-    @classmethod
-    def routing_map(cls, key=None):
-        last_version_key = "_endpoint_route_last_version"
-        is_routing_map_new = not hasattr(cls, "_routing_map")
-        e_registry = cls._get_endpoint_registry(cr = http.request.env.cr)
-        last_version = e_registry.get_last_version()
-        current_version  = getattr(cls, last_version_key, None)
-        if is_routing_map_new:
-            setattr(cls, last_version_key, last_version)
-        elif current_version < last_version:
-            _logger.info("Endpoint registry updated, reset routing map")
-            cls._routing_map = {}
-            cls._rewrite_len = {}
-        return super().routing_map(key=key)
 

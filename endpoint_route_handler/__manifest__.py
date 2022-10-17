@@ -14,5 +14,4 @@
     "data": [
         "security/ir.model.access.csv",
     ],
-    "post_init_hook": "post_init_hook",
 }

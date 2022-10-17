@@ -12,6 +12,7 @@ from ..registry import EndpointRegistry
 _logger = logging.getLogger(__file__)
 
 
+# TODO: remove
 class EndpointRouteSyncMixin(models.AbstractModel):
     """Mixin to handle synchronization of custom routes to the registry.
 
@@ -61,56 +62,21 @@ class EndpointRouteSyncMixin(models.AbstractModel):
         record_ids = record_ids or self.ids
         _logger.info("%s sync registry for %s", self._name, str(record_ids))
         records = self.browse(record_ids).exists()
-        records.filtered(lambda x: x.active)._register_controllers()
-        records.filtered(lambda x: not x.active)._unregister_controllers()
+        records.filtered(lambda x: x.active).write({"registry_sync": True})
 
     @property
     def _endpoint_registry(self):
         return EndpointRegistry.registry_for(self.env.cr)
 
-    def _register_hook(self):
-        super()._register_hook()
-        if not self._abstract:
-            # Ensure existing active records are loaded at startup.
-            # Pass `init` to bypass routing map refresh
-            # since this piece of code runs only when the model is loaded.
-            domain = [("active", "=", True), ("registry_sync", "=", True)]
-            self.search(domain)._register_controllers(init=True)
-
     def unlink(self):
-        if not self._abstract:
-            self._unregister_controllers()
+        self._force_routing_map_refresh()
         return super().unlink()
-
-    def _register_controllers(self, init=False, options=None):
-        if not self:
-            return
-        rules = self._prepare_endpoint_rules(options=options)
-        self._endpoint_registry.update_rules(rules, init=init)
-        if not init:
-            # When envs are already loaded we must signal changes
-            self._force_routing_map_refresh()
-        _logger.debug(
-            "%s registered controllers: %s",
-            self._name,
-            ", ".join([r.route for r in rules]),
-        )
 
     def _force_routing_map_refresh(self):
         """Signal changes to make all routing maps refresh."""
         self.env["ir.http"]._clear_routing_map()  # TODO: redundant?
-        self.env.registry.registry_invalidated = True
-        self.env.registry.signal_changes()
-
-    def _unregister_controllers(self):
-        if not self:
-            return
-        self._endpoint_registry.drop_rules(self._registered_endpoint_rule_keys())
-
-    def _prepare_endpoint_rules(self, options=None):
-        """Return list of `EndpointRule` instances for current model."""
-        raise NotImplementedError()
-
+    
+    # TODO: still useful?
     def _registered_endpoint_rule_keys(self):
         """Return list of registered `EndpointRule` unique keys for current model."""
         raise NotImplementedError()
