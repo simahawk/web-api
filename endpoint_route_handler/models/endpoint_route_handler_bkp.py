@@ -22,7 +22,11 @@ class EndpointRoute(models.Model):
     _description = "Endpoint Route"
 
     active = fields.Boolean(default=True)
-    key = fields.Char(required=True, copy=False, index=True)
+    key = fields.Char(
+        required=True, copy=False, index=True,
+        compute="_compute_key", store=True,
+        readonly=False
+    )
     name = fields.Char(required=True)
     route = fields.Char(
         required=True,
@@ -33,7 +37,10 @@ class EndpointRoute(models.Model):
         store=True,
         copy=False,
     )
-    routing = Serialized(copy=False)
+    routing = Serialized(
+        compute="_compute_routing",
+    )
+    custom_routing = Serialized(copy=False)
     options = Serialized(copy=False)
     route_group = fields.Char(help="Use this to classify routes together")
     route_type = fields.Selection(selection="_selection_route_type", default="http")
@@ -54,6 +61,7 @@ class EndpointRoute(models.Model):
     )
     csrf = fields.Boolean(default=False)
     consumer_model = fields.Char()
+    version = fields.Integer(readonly=True, required=True, default=0)
     # Used to register routes unrelated from another real record.
     parent_id = fields.Many2one(comodel_name="endpoint.route")
 
@@ -72,6 +80,40 @@ class EndpointRoute(models.Model):
             "You can register an endpoint route only once.",
         )
     ]
+
+    # def init(self):
+    #     """Initialize global sequence to synchronize routing maps across workers.
+    #     """
+    #     self.env.cr.execute(
+    #         """
+    #         SELECT 1  FROM pg_class WHERE RELNAME = 'endpoint_route_version'
+    #     """
+    #     )
+    #     if not self.env.cr.fetchone():
+    #         sql = """
+    #             CREATE SEQUENCE endpoint_route_version INCREMENT BY 1 START WITH 1;
+    #             CREATE FUNCTION increment_endpoint_route_version()
+    #               returns trigger
+    #             AS
+    #             $body$
+    #             begin
+    #               new.version := nextval('endpoint_route_version');
+    #               return new;
+    #             end;
+    #             $body$
+    #             language plpgsql;
+
+    #             CREATE TRIGGER  update_endpoint_route_version_trigger
+    #                BEFORE INSERT OR UPDATE ON %(table)s
+    #                FOR EACH ROW
+    #                WHEN (new.registry_sync = true)
+    #                EXECUTE PROCEDURE increment_endpoint_route_version();
+    #             CREATE TRIGGER  delete_endpoint_route_version_trigger
+    #                AFTER DELETE ON %(table)s
+    #                FOR EACH ROW
+    #                EXECUTE PROCEDURE increment_endpoint_route_version();
+    #         """
+    #         self._cr.execute(sql, {"table": AsIs(self._table)})
 
     @property
     def _logger(self):
@@ -101,6 +143,15 @@ class EndpointRoute(models.Model):
             ("application/x-www-form-urlencoded", "Form"),
         ]
 
+    def _compute_key(self):
+        for rec in self:
+            rec.route = rec._endpoint_registry_unique_key()
+
+    @api.depends(lambda self: self._routing_impacting_fields())
+    def _compute_routing(self):
+        for rec in self:
+            rec.routing = rec._get_routing()
+
     @api.depends(lambda self: self._routing_impacting_fields())
     def _compute_endpoint_hash(self):
         # Do not use read to be able to play this on NewId records too
@@ -115,7 +166,7 @@ class EndpointRoute(models.Model):
             rec.endpoint_hash = hash(tuple(vals.values()))
 
     def _routing_impacting_fields(self):
-        return ("route", "auth_type", "request_method", "routing", "options", "csrf")
+        return ("route", "auth_type", "request_method", "routing", "options")
 
     @api.depends("route")
     def _compute_route(self):
@@ -157,6 +208,7 @@ class EndpointRoute(models.Model):
                     _("Request content type is required for POST and PUT.")
                 )
     
+    # TODO: is this still needed?
     def _routing_mandatory_keys(self, fname):
         mandatory_keys = {
             "routing": {
@@ -193,6 +245,20 @@ class EndpointRoute(models.Model):
                     raise exceptions.UserError(
                         _("%s `%s` missing mandatory keys: %s") % (rec.route, fname, ", ".join(errors))
                     )
+
+    def _endpoint_registry_unique_key(self):
+        return "{0._name}:{0.id}".format(self)
+
+    def _default_routing_options(self, vals):
+        consumer = None
+        if vals.get("consumer_model"):
+            consumer = self.get_consumer(vals["consumer_model"])
+        if hasattr(consumer, "_default_endpoint_options_handler"):
+            handler = consumer._default_endpoint_options_handler()
+        else:
+            handler = self._default_endpoint_options_handler(vals)
+        options = {"handler": handler}
+        return options
         
     def get_consumer(self, consumer_model=None):
         consumer_model = consumer_model or self.consumer_model
@@ -201,9 +267,35 @@ class EndpointRoute(models.Model):
             [("endpoint_route_id", "=", self.id)], limit=1
         )
 
+    def _default_endpoint_options_handler(self, vals):
+        self._logger.warning(
+            "No specific endpoint handler options defined for: %s, falling back to default",
+            self._name,
+        )
+        base_path = "odoo.addons.endpoint_route_handler.controllers.main"
+        return {
+            "klass_dotted_path": f"{base_path}.EndpointNotFoundController",
+            "method_name": "auto_not_found",
+        }
+
+    def _get_routing(self):
+        route = self.route
+        routing = dict(
+            type=self.route_type,
+            auth=self.auth_type,
+            methods=[self.request_method],
+            routes=[route],
+            csrf=self.csrf,
+        )
+        custom = self.custom_routing or {}
+        for k in routing.keys():
+            if custom.get(k):
+                routing[k] = custom[k]
+        return routing
+
     def get_endpoint(self):
         """Lookup http.Endpoint to be used for the routing map."""
-        options = self.routing["options"]
+        options = self.routing_metadata["options"]
         handler = self._get_handler(options)
         pargs = options.get("default_pargs", ())
         kwargs = options.get("default_kwargs", {})
@@ -250,3 +342,10 @@ class EndpointRoute(models.Model):
 
     def get_last_version(self):
         return self.sudo().search([], limit=1, order="write_date desc").write_date
+    
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if "options" not in vals:
+                vals["options"] = self._default_routing_options(vals)
+        return super().create(vals_list)

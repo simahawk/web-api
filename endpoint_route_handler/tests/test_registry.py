@@ -2,6 +2,7 @@
 # @author: Simone Orsi <simone.orsi@camptocamp.com>
 # License LGPL-3.0 or later (http://www.gnu.org/licenses/lgpl).
 
+import pdb
 from urllib import request
 from psycopg2.errors import UniqueViolation
 from odoo_test_helper import FakeModelLoader
@@ -49,27 +50,65 @@ class TestRegistry(SavepointCase):
         for i in range(start, stop):
             key = f"route{i}"
             route = f"/test/{i}"
-            options = {
-                "handler": {
-                    "klass_dotted_path": CTRLFake._path,
-                    "method_name": "handler1",
-                }
-            }
-            routing = {"routes": [route,]}
             route_group = "test_route_handler"
             values = dict(
                 name=f"Test {i}",
                 key=key,
                 request_method="GET",
                 route=route,
-                routing_metadata=dict(
-                    options=options,
-                    routing=routing,
-                ),
                 route_group=route_group,
             )
+            values.update(kw)
             records |= self.model.create(values)
         return records
+    
+    def test_defaults(self):
+        rec = self._make_routes(stop=2)
+        self.assertEqual(rec._name, self.model._name)
+        route = rec.endpoint_route_id
+        self.assertEqual(route._name, "endpoint.route")
+        self.assertEqual(route.get_consumer(), rec)
+        self.assertEqual(route.routing, {
+            'type': 'http',
+            'auth': 'user_endpoint',
+            'methods': ['GET'],
+            'routes': ['/test/1'],
+            'csrf': False
+        })
+        ctrl_path = (
+            "odoo.addons.endpoint_route_handler.controllers"
+            ".main.EndpointNotFoundController"
+        )
+        self.assertEqual(rec.options,
+            {'handler': {
+                'klass_dotted_path': ctrl_path,
+                'method_name': 'auto_not_found'
+            }}
+        )
+
+    def test_custom(self):
+        vals = {
+            "name": "Custom",
+            "route": "/foo",
+            "request_method": "GET",
+            "options": {
+                "handler": {
+                    "klass_dotted_path": CTRLFake._path,
+                    "method_name": "handler1",
+                }
+            },
+        }
+        rec = self.model.create(vals)
+        self.assertEqual(rec.options,
+            {'handler': {
+                'klass_dotted_path': CTRLFake._path,
+                'method_name': 'handler1'
+            }}
+        )
+        self.assertFalse(rec.routing["csrf"])
+        rec.write({"csrf": True})
+        self.assertTrue(rec.routing["csrf"])
+        # TODO test more
 
     def test_add_rule(self):
         self._make_routes(stop=5)

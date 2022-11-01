@@ -17,10 +17,6 @@ _logger = logging.getLogger(__name__)
 class IrHttp(models.AbstractModel):
     _inherit = "ir.http"
 
-    @staticmethod
-    def _get_endpoint_registry(cr):
-        return EndpointRegistry.registry_for(cr)
-
     @classmethod
     def _generate_routing_rules(cls, modules, converters):
         # Override to inject custom endpoint rules.
