@@ -25,8 +25,9 @@ class EndpointRouteHandlerTool(models.TransientModel):
 
         Required for NewId records when using this model as a tool.
         """
-        self._compute_endpoint_hash()
-        self._compute_route()
+        # flush_recordset triggers recompute but not inverse
+        self._inverse_request_methods_edit()
+        self.flush_recordset()
 
     def _register_controllers(self, init=False, options=None):
         if self:

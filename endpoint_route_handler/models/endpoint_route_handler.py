@@ -2,13 +2,27 @@
 # @author: Simone Orsi <simone.orsi@camptocamp.com>
 # License LGPL-3.0 or later (http://www.gnu.org/licenses/lgpl).
 
+import json
 import logging
 
 from odoo import _, api, exceptions, fields, models
 
+from odoo.addons.base_sparse_field.models.fields import Serialized
+
 ENDPOINT_ROUTE_CONSUMER_MODELS = {
     # by db
 }
+ALLOWED_REQ_METHODS = ("GET", "POST", "PUT", "PATCH", "HEAD", "DELETE")
+
+
+def sanitize_request_methods(methods_list):
+    return sorted(
+        [
+            x.strip().upper()
+            for x in methods_list
+            if x.strip() and x.strip().upper() in ALLOWED_REQ_METHODS
+        ]
+    )
 
 
 class EndpointRouteHandler(models.AbstractModel):
@@ -33,9 +47,14 @@ class EndpointRouteHandler(models.AbstractModel):
         selection="_selection_auth_type", default="user_endpoint"
     )
     request_content_type = fields.Selection(selection="_selection_request_content_type")
-    # TODO: this is limiting the possibility of supporting more than one method.
-    request_method = fields.Selection(
-        selection="_selection_request_method", required=True
+    request_methods = Serialized(
+        compute="_compute_request_methods",
+        #  inverse="_inverse_request_methods",
+        default="[]",
+    )
+    request_methods_edit = fields.Text(
+        help="New line separated request methods.",
+        inverse="_inverse_request_methods_edit",
     )
     # # TODO: validate params? Just for doc? Maybe use Cerberus?
     # # -> For now let the implementer validate the params in the snippet.
@@ -56,6 +75,19 @@ class EndpointRouteHandler(models.AbstractModel):
             "You can register an endpoint route only once.",
         )
     ]
+
+    @api.depends("request_methods_edit")
+    def _compute_request_methods(self):
+        for rec in self:
+            rec.request_methods = rec._load_request_methods()
+
+    def _load_request_methods(self):
+        return json.dumps(self.request_methods_edit.splitlines())
+
+    def _inverse_request_methods_edit(self):
+        for rec in self:
+            methods = rec.request_methods_edit.replace(",", "\n").splitlines()
+            rec.request_methods_edit = "\n".join(sanitize_request_methods(methods))
 
     @api.constrains("route")
     def _check_route_unique_across_models(self):
@@ -113,14 +145,6 @@ class EndpointRouteHandler(models.AbstractModel):
     def _selection_auth_type(self):
         return [("public", "Public"), ("user_endpoint", "User")]
 
-    def _selection_request_method(self):
-        return [
-            ("GET", "GET"),
-            ("POST", "POST"),
-            ("PUT", "PUT"),
-            ("DELETE", "DELETE"),
-        ]
-
     def _selection_request_content_type(self):
         return [
             ("", "None"),
@@ -145,7 +169,7 @@ class EndpointRouteHandler(models.AbstractModel):
             rec.endpoint_hash = hash(tuple(vals.values()))
 
     def _routing_impacting_fields(self):
-        return ("route", "auth_type", "request_method")
+        return ("route", "auth_type", "request_methods_edit")
 
     @api.depends("route")
     def _compute_route(self):
@@ -180,10 +204,14 @@ class EndpointRouteHandler(models.AbstractModel):
                     % {"name": rec.name, "route": rec.route}
                 )
 
-    @api.constrains("request_method", "request_content_type")
-    def _check_request_method(self):
+    @api.constrains("request_methods", "request_content_type")
+    def _check_request_methods(self):
+        methods_requiring_types = ("POST", "PUT")
         for rec in self:
-            if rec.request_method in ("POST", "PUT") and not rec.request_content_type:
+            requires_validation = any(
+                [x in rec.request_methods for x in methods_requiring_types]
+            )
+            if requires_validation and not rec.request_content_type:
                 raise exceptions.UserError(
                     _("Request content type is required for POST and PUT.")
                 )
@@ -241,7 +269,7 @@ class EndpointRouteHandler(models.AbstractModel):
         routing = dict(
             type=self.route_type,
             auth=self.auth_type,
-            methods=[self.request_method],
+            methods=self.request_methods,
             routes=[route],
             csrf=self.csrf,
         )

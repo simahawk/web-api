@@ -29,7 +29,7 @@ def make_new_route(env, **kw):
     vals = {
         "name": "Test custom route",
         "route": "/my/test/route",
-        "request_method": "GET",
+        "request_methods_edit": "GET",
     }
     vals.update(kw)
     new_route = model.new(vals)
@@ -45,10 +45,15 @@ class TestEndpoint(CommonEndpoint):
     def test_as_tool_base_data(self):
         new_route = make_new_route(self.env)
         self.assertEqual(new_route.route, "/my/test/route")
+        self.assertEqual(new_route.request_methods, ["GET"])
         first_hash = new_route.endpoint_hash
         self.assertTrue(first_hash)
         new_route.route += "/new"
+        new_route.request_methods_edit = "post,get"
+        new_route._refresh_endpoint_data()
         self.assertNotEqual(new_route.endpoint_hash, first_hash)
+        self.assertEqual(new_route.request_methods, ["GET", "POST"])
+        self.assertEqual(new_route.request_methods_edit, "GET\nPOST")
 
     @mute_logger("odoo.addons.base.models.ir_http")
     def test_as_tool_register_single_controller(self):

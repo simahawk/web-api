@@ -36,7 +36,7 @@ For instance::
     vals = {
         "name": "My custom route",
         "route": "/my/custom/route",
-        "request_method": "GET",
+        "request_methods_edit": "GET",
         "auth_type": "public",
     }
     new_route = route_handler.new(vals)

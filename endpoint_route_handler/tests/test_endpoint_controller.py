@@ -25,7 +25,7 @@ class EndpointHttpCase(HttpCase):
     def _make_new_route(self, options=None, **kw):
         vals = {
             "name": "Test custom route",
-            "request_method": "GET",
+            "request_methods_edit": "GET",
         }
         vals.update(kw)
         new_route = self.route_handler.new(vals)
