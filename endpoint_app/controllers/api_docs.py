@@ -7,6 +7,9 @@ from odoo.addons.base_rest.controllers.api_docs import (
     ApiDocsController as BaseController,
 )
 
+# TODO: these controllers should be generated automatically.
+# Also, no dependency on base_rest can be here.
+
 
 class ApiDocsController(BaseController):
     @route(

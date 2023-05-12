@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <odoo>
-    <record id="shopfloor_app_tree_view" model="ir.ui.view">
-        <field name="name">shopfloor app tree</field>
-        <field name="model">shopfloor.app</field>
+    <record id="endpoint_app_tree_view" model="ir.ui.view">
+        <field name="name">endpoint app tree</field>
+        <field name="model">endpoint.app.mixin</field>
         <field name="arch" type="xml">
             <tree
                 decoration-muted="(not active)"
@@ -15,9 +15,9 @@
             </tree>
         </field>
     </record>
-    <record id="shopfloor_app_form_view" model="ir.ui.view">
-        <field name="name">shopfloor app form</field>
-        <field name="model">shopfloor.app</field>
+    <record id="endpoint_app_form_view" model="ir.ui.view">
+        <field name="name">endpoint app form</field>
+        <field name="model">endpoint.app.mixin</field>
         <field name="arch" type="xml">
             <form>
                 <sheet>
@@ -63,7 +63,7 @@
                         <page name="main" string="Main">
                             <group name="one">
                                 <group name="main">
-                                    <field name="category" />
+                                    <field name="app_type" />
                                     <field name="tech_name" />
                                     <field name="short_name" />
                                 </group>
@@ -77,15 +77,6 @@
                                     <field name="lang_ids" widget="many2many_tags" />
                                 </group>
                             </group>
-                            <group name="profiles" string="Profiles and menu items">
-                                <field name="profile_ids" widget="many2many_tags" />
-                                <button
-                                    type="object"
-                                    name="action_view_menu_items"
-                                    string="View menu items"
-                                    class="btn btn-link"
-                                />
-                            </group>
                         </page>
                         <page name="dev" string="Developer" groups="base.group_no_one">
                             <group name="dev_main">
@@ -97,22 +88,22 @@
             </form>
         </field>
     </record>
-    <record id="shopfloor_app_search_view" model="ir.ui.view">
-        <field name="name">shopfloor app search</field>
-        <field name="model">shopfloor.app</field>
+    <record id="endpoint_app_search_view" model="ir.ui.view">
+        <field name="name">endpoint app search</field>
+        <field name="model">endpoint.app.mixin</field>
         <field name="arch" type="xml">
             <search>
                 <field name="name" />
                 <field name="tech_name" />
-                <field name="category" />
+                <field name="app_type" />
                 <field name="registry_sync" />
                 <separator />
                 <group string="Group By">
                     <filter
-                        name="group_by_category"
-                        string="Category"
+                        name="group_by_app_type"
+                        string="app_type"
                         domain="[]"
-                        context="{'group_by':'category'}"
+                        context="{'group_by':'app_type'}"
                     />
                 </group>
                 <separator />
@@ -129,9 +120,9 @@
             </search>
         </field>
     </record>
-    <record id="action_shopfloor_app" model="ir.actions.act_window">
-        <field name="name">Shopfloor apps</field>
-        <field name="res_model">shopfloor.app</field>
+    <record id="action_endpoint_app" model="ir.actions.act_window">
+        <field name="name">endpoint apps</field>
+        <field name="res_model">endpoint.app.mixin</field>
         <field name="type">ir.actions.act_window</field>
         <field name="view_mode">tree,form</field>
     </record>

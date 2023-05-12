@@ -6,7 +6,7 @@
     "summary": "Core module for creating mobile apps",
     "version": "16.0.1.0.0",
     "development_status": "Beta",
-    "category": "Web",
+    "app_type": "Web",
     "website": "https://github.com/OCA/web-api",
     "author": "Camptocamp, Odoo Community Association (OCA)",
     "maintainers": ["simahawk"],
@@ -18,6 +18,5 @@
     ],
     "data": [
         "views/endpoint_app.xml",
-        "views/menus.xml",
     ],
 }

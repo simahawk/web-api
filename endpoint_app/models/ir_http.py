@@ -9,6 +9,8 @@ from odoo.http import request
 from odoo.addons.base.models.ir_http import RequestUID
 
 
+# TODO: not sure is needed, especially w/ v16 dispatchers
+# since the dispatcher can lookup for the app by itself (as fastapi does ATM).
 class TechNameConverter(werkzeug.routing.BaseConverter):
     """Record converter via tech_name field.
 

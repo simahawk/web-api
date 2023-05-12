@@ -6,8 +6,13 @@ from odoo.http import request
 
 from odoo.addons.base_rest.controllers.main import RestController
 
+# TODO: this should be move to a glue module for base_rest
+# if we want to keep a compat layer for endpoints based on components.
+# Furthermore, to support shopfloor components we should move pieces of this stuff to
+# endpoint_app_component_base
 
-class ShopfloorController(RestController):
+
+class ComponentEndpointController(RestController):
     def _process_endpoint(
         self,
         app_id,
