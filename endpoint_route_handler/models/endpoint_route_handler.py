@@ -13,6 +13,7 @@ ENDPOINT_ROUTE_CONSUMER_MODELS = {
     # by db
 }
 ALLOWED_REQ_METHODS = ("GET", "POST", "PUT", "PATCH", "HEAD", "DELETE")
+BLACKLIST_ROUTE_PATHS = ("/", "/web", "/website", "/mail")  # TODO: what else?
 
 
 def sanitize_request_methods(methods_list):
@@ -173,36 +174,40 @@ class EndpointRouteHandler(models.AbstractModel):
 
     @api.depends("route")
     def _compute_route(self):
+        prefix = self._endpoint_route_prefix
         for rec in self:
-            rec.route = rec._clean_route()
+            rec.route = rec._lean_route(rec.route, prefix=prefix)
 
     def _inverse_route(self):
+        prefix = self._endpoint_route_prefix
         for rec in self:
-            rec.route = rec._clean_route()
+            rec.route = rec.clean_route(rec.route, prefix=prefix)
 
     # TODO: move to something better? Eg: computed field?
     # Shall we use the route_group? TBD!
     _endpoint_route_prefix = ""
 
-    def _clean_route(self):
-        route = (self.route or "").strip()
+    @staticmethod
+    def clean_route(route, prefix=None):
+        route = (route or "").strip()
         if not route.startswith("/"):
             route = "/" + route
-        prefix = self._endpoint_route_prefix
         if prefix and not route.startswith(prefix):
             route = prefix + route
         return route
 
-    _blacklist_routes = ("/", "/web")  # TODO: what else?
-
     @api.constrains("route")
     def _check_route(self):
         for rec in self:
-            if rec.route in self._blacklist_routes:
-                raise exceptions.UserError(
-                    _("`%(name)s` uses a blacklisted routed = `%(route)s`")
-                    % {"name": rec.name, "route": rec.route}
-                )
+            self.validate_route(rec.route, rec.name)
+
+    @staticmethod
+    def validate_route(route, name, blacklist=BLACKLIST_ROUTE_PATHS):
+        if route in blacklist:
+            raise exceptions.UserError(
+                _("`%(name)s` uses a blacklisted routed = `%(route)s`")
+                % {"name": name, "route": route}
+            )
 
     @api.constrains("request_methods", "request_content_type")
     def _check_request_methods(self):
