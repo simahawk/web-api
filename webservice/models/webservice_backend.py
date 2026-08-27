@@ -48,30 +48,6 @@ class WebserviceBackend(models.Model):
         "to ensure that no CSRF attack happen"
     )
 
-    @api.onchange("auth_type")
-    def _onchange_auth_type(self):
-        # Keep `oauth2_flow` in sync in the UI as the user edits `auth_type`,
-        # regardless of whether `server_environment` is installed (see
-        # `create`/`write` below for the same guarantee on any other write).
-        if self.auth_type != "oauth2":
-            self.oauth2_flow = False
-
-    @api.model_create_multi
-    def create(self, vals_list):
-        records = super().create(vals_list)
-        records.filtered(
-            lambda r: r.auth_type != "oauth2" and r.oauth2_flow
-        ).oauth2_flow = False
-        return records
-
-    def write(self, vals):
-        res = super().write(vals)
-        if "auth_type" in vals:
-            self.filtered(
-                lambda r: r.auth_type != "oauth2" and r.oauth2_flow
-            ).oauth2_flow = False
-        return res
-
     def call(self, method, *args, **kwargs):
         if not self.auth_type.startswith("oauth2"):
             return super().call(method, *args, **kwargs)

@@ -7,7 +7,7 @@ import logging
 
 import requests
 
-from odoo import api, exceptions, fields, models
+from odoo import _, api, exceptions, fields, models
 
 from ..utils import sanitize_url_for_log
 
@@ -21,23 +21,16 @@ class WebserviceRequestMixin(models.AbstractModel):
     requests based on its own ``auth_type``/credential fields, resolved via
     ``self._get_base_url()`` which must be implemented by the model.
 
-    ``call()`` dispatches by ``self._get_protocol()`` (``self.protocol`` by
-    default) to a ``_handle_call_for_<protocol>`` method that actually
-    performs the request - ``_handle_call_for_http`` today. A new protocol is
-    added by implementing a new ``_handle_call_for_<protocol>``.
-
     Extra auth types are added by other modules via plain model inheritance:
     add the new value to the ``auth_type`` selection, add fields tagged with
     the matching ``auth_type=<value>`` parameter, and implement
     ``_get_auth_for_<value>``/``_get_headers_for_<value>`` and/or override
-    ``_request`` when the whole HTTP request flow needs to change (e.g.
-    oauth2).
+    ``_request`` when the whole request flow needs to change (e.g. oauth2).
     """
 
     _name = "webservice.request.mixin"
     _description = "Webservice Request Mixin"
 
-    protocol = fields.Selection([("http", "HTTP Request")], required=True)
     auth_type = fields.Selection(
         selection=[
             ("none", "Public"),
@@ -78,7 +71,7 @@ class WebserviceRequestMixin(models.AbstractModel):
         def get_selection_value(fname):
             return self._fields.get(fname).convert_to_export(self[fname], self)
 
-        return self.env._(
+        return _(
             "Webservice '%(name)s' requires '%(auth_type)s' authentication. "
             "However, the following field(s) are not valued: %(fields)s"
         ) % {
@@ -93,29 +86,21 @@ class WebserviceRequestMixin(models.AbstractModel):
 
     def call(self, method, *args, **kwargs):
         _logger.debug("%s: call %s %s %s", self.display_name, method, args, kwargs)
-        handler = getattr(self, "_handle_call_for_" + self._get_protocol())
-        response = handler(method, *args, **kwargs)
+        response = getattr(self, "call_" + method)(*args, **kwargs)
         _logger.debug("%s: response: \n%s", self.display_name, response)
         return response
 
-    def _get_protocol(self):
-        return self.protocol
-
-    def _handle_call_for_http(self, method, **kwargs):
-        return self._request(method, **kwargs)
-
-    # shortcuts
     def call_get(self, **kwargs):
-        return self.call("get", **kwargs)
+        return self._request("get", **kwargs)
 
     def call_post(self, **kwargs):
-        return self.call("post", **kwargs)
+        return self._request("post", **kwargs)
 
     def call_put(self, **kwargs):
-        return self.call("put", **kwargs)
+        return self._request("put", **kwargs)
 
     def call_delete(self, **kwargs):
-        return self.call("delete", **kwargs)
+        return self._request("delete", **kwargs)
 
     def _request(self, method, url=None, url_params=None, **kwargs):
         url = self._get_url(url=url, url_params=url_params)

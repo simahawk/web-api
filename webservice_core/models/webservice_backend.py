@@ -13,6 +13,7 @@ class WebserviceBackend(models.Model):
 
     name = fields.Char(required=True)
     tech_name = fields.Char(required=True)
+    protocol = fields.Selection([("http", "HTTP Request")], required=True)
     url = fields.Char(required=True)
     company_id = fields.Many2one("res.company", string="Company")
 

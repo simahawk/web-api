@@ -1,3 +1,3 @@
-- Simone Orsi \<<simone.orsi@camptocamp.com>\>
 - Enric Tobella \<<etobella@creublanca.es>\>
 - Alexandre Fayolle \<<alexandre.fayolle@camptocamp.com>\>
+- Simone Orsi \<<simone.orsi@camptocamp.com>\>
