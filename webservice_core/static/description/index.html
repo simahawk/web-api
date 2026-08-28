@@ -372,11 +372,19 @@ ul.auto-toc {
 <p><a class="reference external image-reference" href="https://odoo-community.org/page/development-status"><img alt="Alpha" src="https://img.shields.io/badge/maturity-Alpha-red.png" /></a> <a class="reference external image-reference" href="http://www.gnu.org/licenses/agpl-3.0-standalone.html"><img alt="License: AGPL-3" src="https://img.shields.io/badge/licence-AGPL--3-blue.png" /></a> <a class="reference external image-reference" href="https://github.com/OCA/web-api/tree/18.0/webservice_core"><img alt="OCA/web-api" src="https://img.shields.io/badge/github-OCA%2Fweb--api-lightgray.png?logo=github" /></a> <a class="reference external image-reference" href="https://translation.odoo-community.org/projects/web-api-18-0/web-api-18-0-webservice_core"><img alt="Translate me on Weblate" src="https://img.shields.io/badge/weblate-Translate%20me-F47D42.png" /></a> <a class="reference external image-reference" href="https://runboat.odoo-community.org/builds?repo=OCA/web-api&amp;target_branch=18.0"><img alt="Try me on Runboat" src="https://img.shields.io/badge/runboat-Try%20me-875A7B.png" /></a></p>
 <p>This module provides the <tt class="docutils literal">webservice.backend</tt> model with its
 authentication (public, username/password, API key) and HTTP call
-features (<tt class="docutils literal">get</tt>/<tt class="docutils literal">post</tt>/<tt class="docutils literal">put</tt>).</p>
+features (<tt class="docutils literal">get</tt>/<tt class="docutils literal">post</tt>/<tt class="docutils literal">put</tt>/<tt class="docutils literal">delete</tt>).</p>
 <p>It has no dependency on <tt class="docutils literal">component</tt> or <tt class="docutils literal">server_environment</tt>, so it
 can be used as a lightweight building block by any module needing to
 configure and call an outbound webservice, without pulling in extra
 frameworks.</p>
+<p>On top of a backend, you can configure specific, named
+<tt class="docutils literal">webservice.endpoint</tt> records via the UI, instead of only building
+calls in Python via <tt class="docutils literal">webservice.backend.call(method, url_args, <span class="pre">...)</span></tt>.
+Each endpoint bundles a required description, a fixed HTTP method and
+relative path (appended to the backend URL), static headers, and an
+optional authentication override, fully independent from the backend’s.
+Endpoints are called with <tt class="docutils literal"><span class="pre">endpoint.call(...)</span></tt>; calling the backend
+directly with <tt class="docutils literal">backend.call(method, <span class="pre">...)</span></tt> remains fully supported.</p>
 <p>The <tt class="docutils literal">webservice</tt> module builds on top of this one to add OAuth2
 authentication and <tt class="docutils literal">server_environment</tt> support.</p>
 <div class="admonition important">

@@ -105,13 +105,16 @@ class WebserviceRequestMixin(models.AbstractModel):
     def _request(self, method, url=None, url_params=None, **kwargs):
         url = self._get_url(url=url, url_params=url_params)
         content_only = kwargs.pop("content_only", True)
+        # ``content_type`` is only consumed by ``_get_headers``: it is not a valid
+        # ``requests.request`` kwarg and must not leak into ``new_kwargs`` below.
+        content_type = kwargs.pop("content_type", False)
         url_to_log = self._sanitize_url_for_log(url)
         _logger.info("%s call to %s", method, url_to_log)
         new_kwargs = kwargs.copy()
         new_kwargs.update(
             {
                 "auth": self._get_auth(**kwargs),
-                "headers": self._get_headers(**kwargs),
+                "headers": self._get_headers(content_type=content_type, **kwargs),
                 # TODO: no timeout is enforced here (requests would wait forever).
                 # Consider adding configurable connect/read timeout fields.
                 "timeout": None,

@@ -4,11 +4,11 @@
 
 {
     "name": "WebService Core",
-    "summary": """Webservice backend: auth & call features, no extra dependencies""",
+    "summary": """Webservice backend & endpoints: auth and call features""",
     "version": "18.0.1.0.0",
     "license": "AGPL-3",
     "development_status": "Alpha",
-    "maintainers": ["simahawk"],
+    "maintainers": ["simahawk", "etobella"],
     "author": "Creu Blanca, Camptocamp, Odoo Community Association (OCA)",
     "website": "https://github.com/OCA/web-api",
     "depends": ["base"],
@@ -17,6 +17,7 @@
         "security/ir.model.access.csv",
         "security/ir_rule.xml",
         "views/webservice_backend.xml",
+        "views/webservice_endpoint.xml",
     ],
     "demo": [],
 }
