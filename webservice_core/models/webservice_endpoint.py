@@ -49,9 +49,6 @@ class WebserviceEndpoint(models.Model):
         help="Use this endpoint's own authentication instead of the backend's.",
     )
     auth_type = fields.Selection(required=False)
-    header_ids = fields.One2many(
-        "webservice.endpoint.header", "endpoint_id", string="Headers"
-    )
 
     _sql_constraints = [
         (
@@ -76,15 +73,21 @@ class WebserviceEndpoint(models.Model):
     def _get_base_url(self):
         return self.backend_id.url
 
+    def _call_prepare(self, **kwargs):
+        # Compose: this endpoint's own headers/params (+ call-time, which
+        # wins) first, then the backend's own as the base layer underneath -
+        # so the backend provides defaults, the endpoint overrides them
+        # (whether statically configured or passed at call time), no matter
+        # which of the two actually delegates the request.
+        kwargs = super()._call_prepare(**kwargs)
+        return self.backend_id._call_prepare(**kwargs)
+
     def call(self, url_params=None, **kwargs):
         self.ensure_one()
         kwargs.setdefault("url", self.path)
-        headers = {h.name: h.value for h in self.header_ids}
-        headers.update(kwargs.pop("headers", None) or {})
-        if headers:
-            kwargs["headers"] = headers
-        if self.content_type and "content_type" not in kwargs:
-            kwargs["content_type"] = self.content_type
+        if url_params:
+            kwargs["url_params"] = url_params
+        kwargs = self._call_prepare(**kwargs)
         if self.override_auth:
-            return super().call(self.http_method, url_params=url_params, **kwargs)
-        return self.backend_id.call(self.http_method, url_params=url_params, **kwargs)
+            return super().call(self.http_method, **kwargs)
+        return self.backend_id.call(self.http_method, **kwargs)

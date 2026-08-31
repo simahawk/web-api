@@ -131,3 +131,80 @@ class TestWebserviceEndpoint(CommonWebService):
         self.assertEqual(
             responses.calls[0].request.headers["X-Demo"], "call-time-value"
         )
+
+    @responses.activate
+    def test_call_sends_default_url_params_as_querystring(self):
+        self.endpoint.write(
+            {"url_param_ids": [(0, 0, {"name": "verbose", "value": "1"})]}
+        )
+        url = f"{self.url}orders/42/status"
+        responses.add(responses.GET, url, body="{}")
+        self.endpoint.call(url_params={"order_id": 42})
+        self.assertIn("verbose=1", responses.calls[0].request.url)
+
+    @responses.activate
+    def test_call_params_kwarg_overrides_default(self):
+        self.endpoint.write(
+            {"url_param_ids": [(0, 0, {"name": "verbose", "value": "1"})]}
+        )
+        url = f"{self.url}orders/42/status"
+        responses.add(responses.GET, url, body="{}")
+        self.endpoint.call(url_params={"order_id": 42}, params={"verbose": "0"})
+        self.assertIn("verbose=0", responses.calls[0].request.url)
+
+    @responses.activate
+    def test_call_url_param_value_placeholder_resolved(self):
+        # A configured querystring param value may itself contain a
+        # `{placeholder}`, resolved against the same `url_params` used for
+        # the URL path.
+        self.endpoint.write(
+            {"url_param_ids": [(0, 0, {"name": "ref", "value": "order-{order_id}"})]}
+        )
+        url = f"{self.url}orders/42/status"
+        responses.add(responses.GET, url, body="{}")
+        self.endpoint.call(url_params={"order_id": 42})
+        self.assertIn("ref=order-42", responses.calls[0].request.url)
+
+    @responses.activate
+    def test_call_merges_backend_and_endpoint_headers_endpoint_wins(self):
+        self.backend.write(
+            {"header_ids": [(0, 0, {"name": "X-Demo", "value": "backend-value"})]}
+        )
+        self.endpoint.write(
+            {"header_ids": [(0, 0, {"name": "X-Demo", "value": "endpoint-value"})]}
+        )
+        url = f"{self.url}orders/42/status"
+        responses.add(responses.GET, url, body="{}")
+        self.endpoint.call(url_params={"order_id": 42})
+        self.assertEqual(responses.calls[0].request.headers["X-Demo"], "endpoint-value")
+
+    @responses.activate
+    def test_call_inherits_backend_headers_when_endpoint_has_none(self):
+        self.backend.write(
+            {"header_ids": [(0, 0, {"name": "X-Backend", "value": "backend-value"})]}
+        )
+        url = f"{self.url}orders/42/status"
+        responses.add(responses.GET, url, body="{}")
+        self.endpoint.call(url_params={"order_id": 42})
+        self.assertEqual(
+            responses.calls[0].request.headers["X-Backend"], "backend-value"
+        )
+
+    @responses.activate
+    def test_backend_call_uses_own_header_and_url_param_defaults(self):
+        self.backend.write(
+            {
+                "header_ids": [(0, 0, {"name": "X-Backend", "value": "1"})],
+                "url_param_ids": [(0, 0, {"name": "verbose", "value": "1"})],
+            }
+        )
+        responses.add(responses.GET, self.url, body="{}")
+        self.backend.call("get")
+        self.assertEqual(responses.calls[0].request.headers["X-Backend"], "1")
+        self.assertIn("verbose=1", responses.calls[0].request.url)
+
+    def test_header_line_gets_res_model_and_res_id_set(self):
+        self.backend.write({"header_ids": [(0, 0, {"name": "X", "value": "1"})]})
+        line = self.backend.header_ids
+        self.assertEqual(line.res_model, "webservice.backend")
+        self.assertEqual(line.res_id, self.backend.id)

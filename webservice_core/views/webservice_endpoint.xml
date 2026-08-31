@@ -42,6 +42,14 @@
                                 </list>
                             </field>
                         </page>
+                        <page name="url_params" string="URL Params">
+                            <field name="url_param_ids">
+                                <list editable="bottom">
+                                    <field name="name" />
+                                    <field name="value" />
+                                </list>
+                            </field>
+                        </page>
                         <page name="auth" string="Authentication">
                             <group name="auth">
                                 <field name="override_auth" />

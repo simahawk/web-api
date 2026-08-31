@@ -81,9 +81,9 @@ Authors
 Contributors
 ------------
 
+- Simone Orsi <simone.orsi@camptocamp.com>
 - Enric Tobella <etobella@creublanca.es>
 - Alexandre Fayolle <alexandre.fayolle@camptocamp.com>
-- Simone Orsi <simone.orsi@camptocamp.com>
 
 Maintainers
 -----------
@@ -101,10 +101,13 @@ promote its widespread use.
 .. |maintainer-simahawk| image:: https://github.com/simahawk.png?size=40px
     :target: https://github.com/simahawk
     :alt: simahawk
+.. |maintainer-etobella| image:: https://github.com/etobella.png?size=40px
+    :target: https://github.com/etobella
+    :alt: etobella
 
-Current `maintainer <https://odoo-community.org/page/maintainer-role>`__:
+Current `maintainers <https://odoo-community.org/page/maintainer-role>`__:
 
-|maintainer-simahawk| 
+|maintainer-simahawk| |maintainer-etobella| 
 
 This module is part of the `OCA/web-api <https://github.com/OCA/web-api/tree/18.0/webservice_core>`_ project on GitHub.
 

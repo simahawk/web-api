@@ -50,6 +50,43 @@ class WebserviceRequestMixin(models.AbstractModel):
             ("application/x-www-form-urlencoded", "Form"),
         ],
     )
+    header_ids = fields.One2many(
+        "webservice.header",
+        "res_id",
+        string="Headers",
+        domain=lambda self: [("res_model", "=", self._name)],
+        help="Static default headers, merged into every call. "
+        "An explicit `headers` kwarg passed to `call()` wins over these.",
+    )
+    url_param_ids = fields.One2many(
+        "webservice.url_param",
+        "res_id",
+        string="URL Params",
+        domain=lambda self: [("res_model", "=", self._name)],
+        help="Static default querystring params, merged into every call. "
+        "An explicit `params` kwarg passed to `call()` wins over these. "
+        "A value may contain a '{placeholder}' resolved against the same "
+        "values used to fill the URL path (the `url_params` kwarg).",
+    )
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            self._set_reference_line_defaults(vals)
+        return super().create(vals_list)
+
+    def write(self, vals):
+        self._set_reference_line_defaults(vals)
+        return super().write(vals)
+
+    def _set_reference_line_defaults(self, vals):
+        # `header_ids`/`url_param_ids` point to generic (`res_model`/`res_id`)
+        # line models: the ORM only auto-fills `res_id` (the declared inverse
+        # of the One2many), so `res_model` must be set explicitly here.
+        for fname in ("header_ids", "url_param_ids"):
+            for command in vals.get(fname) or []:
+                if command[0] == 0:
+                    command[2].setdefault("res_model", self._name)
 
     @api.constrains("auth_type")
     def _check_auth_type(self):
@@ -85,10 +122,32 @@ class WebserviceRequestMixin(models.AbstractModel):
         return name in extra_params or super()._valid_field_parameter(field, name)
 
     def call(self, method, *args, **kwargs):
+        kwargs = self._call_prepare(**kwargs)
         _logger.debug("%s: call %s %s %s", self.display_name, method, args, kwargs)
         response = getattr(self, "call_" + method)(*args, **kwargs)
         _logger.debug("%s: response: \n%s", self.display_name, response)
         return response
+
+    def _call_prepare(self, **kwargs):
+        """Merge this record's own configured headers/URL params into kwargs.
+
+        Call-time values (already present in ``kwargs``) win over this
+        record's own configuration for matching keys.
+        """
+        headers = {h.name: h.value for h in self.header_ids}
+        headers.update(kwargs.pop("headers", None) or {})
+        if headers:
+            kwargs["headers"] = headers
+
+        params = {p.name: p.value for p in self.url_param_ids}
+        params.update(kwargs.pop("params", None) or {})
+        if params:
+            kwargs["params"] = params
+
+        if self.content_type and "content_type" not in kwargs:
+            kwargs["content_type"] = self.content_type
+
+        return kwargs
 
     def call_get(self, **kwargs):
         return self._request("get", **kwargs)
@@ -120,6 +179,10 @@ class WebserviceRequestMixin(models.AbstractModel):
                 "timeout": None,
             }
         )
+        if new_kwargs.get("params"):
+            new_kwargs["params"] = self._resolve_query_params(
+                new_kwargs["params"], url_params
+            )
         # pylint: disable=E8106
         request = requests.request(method, url, **new_kwargs)
         request.raise_for_status()
@@ -172,6 +235,13 @@ class WebserviceRequestMixin(models.AbstractModel):
 
         url_params = url_params or kwargs
         return url.format(**url_params)
+
+    def _resolve_query_params(self, params, url_params):
+        url_params = url_params or {}
+        return {
+            name: value.format(**url_params) if isinstance(value, str) else value
+            for name, value in params.items()
+        }
 
     def _get_base_url(self):
         """Return the base url requests are relative to.

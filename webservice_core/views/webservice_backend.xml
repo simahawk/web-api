@@ -64,6 +64,24 @@
                             required="auth_type == 'api_key'"
                         />
                     </group>
+                    <notebook>
+                        <page name="headers" string="Headers">
+                            <field name="header_ids">
+                                <list editable="bottom">
+                                    <field name="name" />
+                                    <field name="value" />
+                                </list>
+                            </field>
+                        </page>
+                        <page name="url_params" string="URL Params">
+                            <field name="url_param_ids">
+                                <list editable="bottom">
+                                    <field name="name" />
+                                    <field name="value" />
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
                 </sheet>
             </form>
         </field>
