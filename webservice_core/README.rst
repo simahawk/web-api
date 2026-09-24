@@ -1,7 +1,3 @@
-.. image:: https://odoo-community.org/readme-banner-image
-   :target: https://odoo-community.org/get-involved?utm_source=readme
-   :alt: Odoo Community Association
-
 ===============
 WebService Core
 ===============
@@ -17,7 +13,7 @@ WebService Core
 .. |badge1| image:: https://img.shields.io/badge/maturity-Production%2FStable-green.png
     :target: https://odoo-community.org/page/development-status
     :alt: Production/Stable
-.. |badge2| image:: https://img.shields.io/badge/license-AGPL--3-blue.png
+.. |badge2| image:: https://img.shields.io/badge/licence-AGPL--3-blue.png
     :target: http://www.gnu.org/licenses/agpl-3.0-standalone.html
     :alt: License: AGPL-3
 .. |badge3| image:: https://img.shields.io/badge/github-OCA%2Fweb--api-lightgray.png?logo=github
@@ -34,12 +30,21 @@ WebService Core
 
 This module provides the ``webservice.backend`` model with its
 authentication (public, username/password, API key) and HTTP call
-features (``get``/``post``/``put``).
+features (``get``/``post``/``put``/``delete``).
 
 It has no dependency on ``component`` or ``server_environment``, so it
 can be used as a lightweight building block by any module needing to
 configure and call an outbound webservice, without pulling in extra
 frameworks.
+
+On top of a backend, you can configure specific, named
+``webservice.endpoint`` records via the UI, instead of only building
+calls in Python via ``webservice.backend.call(method, url_args, ...)``.
+Each endpoint bundles a required description, a fixed HTTP method and
+relative path (appended to the backend URL), static headers, and an
+optional authentication override, fully independent from the backend's.
+Endpoints are called with ``endpoint.call(...)``; calling the backend
+directly with ``backend.call(method, ...)`` remains fully supported.
 
 **Table of contents**
 
@@ -81,9 +86,7 @@ Look up the backend (e.g. by its technical name) and call it:
 .. code:: python
 
    backend = env["webservice.backend"].search([("tech_name", "=", "my_api")])
-   result = backend.call("get")  # -> requests.Response
-   result.content
-   result.status_code
+   result = backend.call("get")  # -> the full requests.Response object
 
 ``call(method, *args, **kwargs)`` accepts any of the standard HTTP verbs
 (``get``, ``post``, ``put``, ``delete``) and forwards everything else to
@@ -127,6 +130,15 @@ type for a single call (same format ``requests`` itself accepts, e.g. a
 .. code:: python
 
    backend.call("get", auth=("other_user", "other_password"))
+
+**Response**: ``call()`` always returns the full ``requests.Response``
+object (status code, headers, content, ...):
+
+.. code:: python
+
+   response = backend.call("get")
+   response.status_code
+   response.content
 
 Bug Tracker
 ===========
