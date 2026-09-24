@@ -4,7 +4,7 @@
 
 {
     "name": "WebService Core",
-    "summary": """Webservice backend: auth & call features, no extra dependencies""",
+    "summary": """Webservice backend & endpoints: auth and call features""",
     "version": "18.0.1.1.0",
     "license": "AGPL-3",
     "development_status": "Production/Stable",
@@ -17,6 +17,7 @@
         "security/ir.model.access.csv",
         "security/ir_rule.xml",
         "views/webservice_backend.xml",
+        "views/webservice_endpoint.xml",
     ],
     "pre_init_hook": "pre_init_hook",
 }
