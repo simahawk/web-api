@@ -67,6 +67,9 @@ Go to *Settings > Technical > WebService Backend* (requires the
 - **Content-Type**: optional default ``Content-Type`` header for every
   call.
 
+Under the **Headers** and **Querystring Params** tabs you can configure
+static defaults, merged into every call (see *Usage*).
+
 Then configure authentication via **Auth Type**:
 
 - **Public**: no credentials needed.
@@ -77,6 +80,10 @@ Then configure authentication via **Auth Type**:
 
 Required fields depend on the selected auth type; the form only shows
 and requires the ones that apply, and saving enforces it.
+
+Each ``webservice.endpoint`` (see *Description*) has its own
+Content-Type, Headers and Querystring Params, overriding the backend's
+own for that specific endpoint - set only what needs to differ.
 
 Usage
 =====
@@ -116,12 +123,25 @@ If the backend's URL (or the ``url`` passed above) contains
    backend.call("get", url_params={"endpoint": "orders"})
 
 **Headers**: pass ``headers`` to add/override headers for that call;
-they are merged on top of the backend's own ``Content-Type`` and
-auth-derived headers (e.g. the API key header):
+they are merged on top of the backend's own static headers (configured
+in the "Headers" tab), ``Content-Type`` and auth-derived headers (e.g.
+the API key header) - the ``headers`` kwarg wins on matching keys:
 
 .. code:: python
 
    backend.call("get", headers={"X-Request-Id": "42"})
+
+**Querystring params**: sent via ``requests``' ``params=``, not to be
+confused with ``url_params`` above, which fills ``{placeholder}`` tokens
+in the URL path itself. Configure static defaults in the "Querystring
+Params" tab - a value there may itself contain a ``{placeholder}``,
+resolved against the same ``url_params`` used for the URL. An explicit
+``params`` kwarg passed to ``call()`` wins over the static configuration
+on matching keys:
+
+.. code:: python
+
+   backend.call("get", params={"verbose": "1"})
 
 **Auth override**: pass ``auth`` to bypass the backend's configured auth
 type for a single call (same format ``requests`` itself accepts, e.g. a
