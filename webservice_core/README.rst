@@ -66,6 +66,8 @@ Go to *Settings > Technical > WebService Backend* (requires the
   (see *Usage*), e.g. ``https://api.example.com/{endpoint}``.
 - **Content-Type**: optional default ``Content-Type`` header for every
   call.
+- **Timeout**: optional timeout in seconds for the whole request
+  (connect + read). Left empty, a call waits indefinitely.
 
 Under the **Headers** and **Querystring Params** tabs you can configure
 static defaults, merged into every call (see *Usage*).
@@ -82,8 +84,9 @@ Required fields depend on the selected auth type; the form only shows
 and requires the ones that apply, and saving enforces it.
 
 Each ``webservice.endpoint`` (see *Description*) has its own
-Content-Type, Headers and Querystring Params, overriding the backend's
-own for that specific endpoint - set only what needs to differ.
+Content-Type, Timeout, Headers and Querystring Params, overriding the
+backend's own for that specific endpoint - set only what needs to
+differ.
 
 Usage
 =====
@@ -150,6 +153,13 @@ type for a single call (same format ``requests`` itself accepts, e.g. a
 .. code:: python
 
    backend.call("get", auth=("other_user", "other_password"))
+
+**Timeout**: pass ``timeout`` to override the backend's own configured
+timeout (in seconds) for a single call:
+
+.. code:: python
+
+   backend.call("get", timeout=5)
 
 **Response**: ``call()`` always returns the full ``requests.Response``
 object (status code, headers, content, ...):

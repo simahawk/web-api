@@ -413,6 +413,8 @@ used here; search by <tt class="docutils literal">tech_name</tt> instead).</li>
 (see <em>Usage</em>), e.g. <tt class="docutils literal"><span class="pre">https://api.example.com/{endpoint}</span></tt>.</li>
 <li><strong>Content-Type</strong>: optional default <tt class="docutils literal"><span class="pre">Content-Type</span></tt> header for every
 call.</li>
+<li><strong>Timeout</strong>: optional timeout in seconds for the whole request
+(connect + read). Left empty, a call waits indefinitely.</li>
 </ul>
 <p>Under the <strong>Headers</strong> and <strong>Querystring Params</strong> tabs you can configure
 static defaults, merged into every call (see <em>Usage</em>).</p>
@@ -427,8 +429,9 @@ Key header</strong> (the header name to send it under, e.g. <tt class="docutils 
 <p>Required fields depend on the selected auth type; the form only shows
 and requires the ones that apply, and saving enforces it.</p>
 <p>Each <tt class="docutils literal">webservice.endpoint</tt> (see <em>Description</em>) has its own
-Content-Type, Headers and Querystring Params, overriding the backend’s
-own for that specific endpoint - set only what needs to differ.</p>
+Content-Type, Timeout, Headers and Querystring Params, overriding the
+backend’s own for that specific endpoint - set only what needs to
+differ.</p>
 </div>
 <div class="section" id="usage">
 <h1><a class="toc-backref" href="#toc-entry-2">Usage</a></h1>
@@ -480,6 +483,11 @@ type for a single call (same format <tt class="docutils literal">requests</tt> i
 <tt class="docutils literal">(user, password)</tt> tuple):</p>
 <pre class="code python literal-block">
 <span class="n">backend</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">&quot;get&quot;</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;other_user&quot;</span><span class="p">,</span> <span class="s2">&quot;other_password&quot;</span><span class="p">))</span>
+</pre>
+<p><strong>Timeout</strong>: pass <tt class="docutils literal">timeout</tt> to override the backend’s own configured
+timeout (in seconds) for a single call:</p>
+<pre class="code python literal-block">
+<span class="n">backend</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">&quot;get&quot;</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
 </pre>
 <p><strong>Response</strong>: <tt class="docutils literal">call()</tt> always returns the full <tt class="docutils literal">requests.Response</tt>
 object (status code, headers, content, …):</p>
